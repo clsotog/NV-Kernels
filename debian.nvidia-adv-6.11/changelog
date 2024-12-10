@@ -1,3 +1,9 @@
+linux-nvidia-adv-6.11 (6.11.0-2000.0) noble; urgency=medium
+
+  * Initialzie noble:linux-nvidia-adv-6.11
+
+ -- Brad Figg <bfigg@nvidia.com>  Tue, 10 Dec 2024 07:17:50 -0800
+
 linux-nvidia-6.11 (6.11.0-1002.2) noble; urgency=medium
 
   * noble/linux-nvidia-6.11: 6.11.0-1002.2 -proposed tracker (LP: #2085443)
