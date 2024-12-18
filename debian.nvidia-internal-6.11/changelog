@@ -1,8 +1,8 @@
-linux-nvidia-internal-6.11 (6.11.0-3000.0) noble; urgency=medium
+linux-nvidia-internal-6.11 (6.11.0-3001.1) noble; urgency=medium
 
-  * Initialzie noble:linux-nvidia-internal-6.11
+  * Ubuntu linux-nvidia-internal-6.11_6.11.0-3001.1
 
- -- Brad Figg <bfigg@nvidia.com>  Wed, 18 Dec 2024 13:32:44 -0800
+ -- Brad Figg <bfigg@nvidia.com>  Wed, 18 Dec 2024 15:26:34 -0800
 
 linux-nvidia-adv-6.11 (6.11.0-2000.0) noble; urgency=medium
 
