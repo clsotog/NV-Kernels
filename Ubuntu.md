@@ -1,4 +1,4 @@
-Name:    linux-nvidia-adv-6.11
+Name:    linux-nvidia-internal-6.11
 Version: 6.11.0
 Series:  24.04 (noble)
 Description:
