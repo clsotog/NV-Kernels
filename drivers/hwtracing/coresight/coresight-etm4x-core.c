@@ -752,7 +752,8 @@ out:
 }
 
 static int etm4_enable_perf(struct coresight_device *csdev,
-			    struct perf_event *event)
+			    struct perf_event *event,
+			    struct coresight_trace_id_map *id_map)
 {
 	int ret = 0, trace_id;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
@@ -775,7 +776,7 @@ static int etm4_enable_perf(struct coresight_device *csdev,
 	 * with perf locks - we know the ID cannot change until perf shuts down
 	 * the session
 	 */
-	trace_id = coresight_trace_id_read_cpu_id(drvdata->cpu);
+	trace_id = coresight_trace_id_read_cpu_id_map(drvdata->cpu, id_map);
 	if (!IS_VALID_CS_TRACE_ID(trace_id)) {
 		dev_err(&drvdata->csdev->dev, "Failed to set trace ID for %s on CPU%d\n",
 			dev_name(&drvdata->csdev->dev), drvdata->cpu);
@@ -837,24 +838,21 @@ unlock_sysfs_enable:
 }
 
 static int etm4_enable(struct coresight_device *csdev, struct perf_event *event,
-		       enum cs_mode mode)
+		       enum cs_mode mode, struct coresight_trace_id_map *id_map)
 {
 	int ret;
-	u32 val;
-	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
-	val = local_cmpxchg(&drvdata->mode, CS_MODE_DISABLED, mode);
-
-	/* Someone is already using the tracer */
-	if (val)
+	if (!coresight_take_mode(csdev, mode)) {
+		/* Someone is already using the tracer */
 		return -EBUSY;
+	}
 
 	switch (mode) {
 	case CS_MODE_SYSFS:
 		ret = etm4_enable_sysfs(csdev);
 		break;
 	case CS_MODE_PERF:
-		ret = etm4_enable_perf(csdev, event);
+		ret = etm4_enable_perf(csdev, event, id_map);
 		break;
 	default:
 		ret = -EINVAL;
@@ -862,7 +860,7 @@ static int etm4_enable(struct coresight_device *csdev, struct perf_event *event,
 
 	/* The tracer didn't start */
 	if (ret)
-		local_set(&drvdata->mode, CS_MODE_DISABLED);
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
 
 	return ret;
 }
@@ -1004,14 +1002,13 @@ static void etm4_disable(struct coresight_device *csdev,
 			 struct perf_event *event)
 {
 	enum cs_mode mode;
-	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	/*
 	 * For as long as the tracer isn't disabled another entity can't
 	 * change its status.  As such we can read the status here without
 	 * fearing it will change under us.
 	 */
-	mode = local_read(&drvdata->mode);
+	mode = coresight_get_mode(csdev);
 
 	switch (mode) {
 	case CS_MODE_DISABLED:
@@ -1025,7 +1022,7 @@ static void etm4_disable(struct coresight_device *csdev,
 	}
 
 	if (mode)
-		local_set(&drvdata->mode, CS_MODE_DISABLED);
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
 }
 
 static const struct coresight_ops_source etm4_source_ops = {
@@ -1657,7 +1654,7 @@ static int etm4_online_cpu(unsigned int cpu)
 		return etm4_probe_cpu(cpu);
 
 	if (etmdrvdata[cpu]->boot_enable && !etmdrvdata[cpu]->sticky_enable)
-		coresight_enable(etmdrvdata[cpu]->csdev);
+		coresight_enable_sysfs(etmdrvdata[cpu]->csdev);
 	return 0;
 }
 
@@ -1670,7 +1667,7 @@ static int etm4_starting_cpu(unsigned int cpu)
 	if (!etmdrvdata[cpu]->os_unlock)
 		etm4_os_unlock(etmdrvdata[cpu]);
 
-	if (local_read(&etmdrvdata[cpu]->mode))
+	if (coresight_get_mode(etmdrvdata[cpu]->csdev))
 		etm4_enable_hw(etmdrvdata[cpu]);
 	spin_unlock(&etmdrvdata[cpu]->spinlock);
 	return 0;
@@ -1682,7 +1679,7 @@ static int etm4_dying_cpu(unsigned int cpu)
 		return 0;
 
 	spin_lock(&etmdrvdata[cpu]->spinlock);
-	if (local_read(&etmdrvdata[cpu]->mode))
+	if (coresight_get_mode(etmdrvdata[cpu]->csdev))
 		etm4_disable_hw(etmdrvdata[cpu]);
 	spin_unlock(&etmdrvdata[cpu]->spinlock);
 	return 0;
@@ -1839,7 +1836,7 @@ static int etm4_cpu_save(struct etmv4_drvdata *drvdata)
 	 * Save and restore the ETM Trace registers only if
 	 * the ETM is active.
 	 */
-	if (local_read(&drvdata->mode) && drvdata->save_state)
+	if (coresight_get_mode(drvdata->csdev) && drvdata->save_state)
 		ret = __etm4_cpu_save(drvdata);
 	return ret;
 }
@@ -2100,7 +2097,7 @@ static int etm4_add_coresight_dev(struct etm4_init_arg *init_arg)
 		 drvdata->cpu, type_name, major, minor);
 
 	if (boot_enable) {
-		coresight_enable(drvdata->csdev);
+		coresight_enable_sysfs(drvdata->csdev);
 		drvdata->boot_enable = true;
 	}
 
