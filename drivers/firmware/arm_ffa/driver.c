@@ -2000,6 +2000,21 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
+static int ffa_reboot_notifier(struct notifier_block *nb, unsigned long action,
+			       void *data)
+{
+	if (!ffa_notifications_disabled())
+		ffa_notifications_cleanup();
+
+	ffa_rxtx_unmap(drv_info->vm_id);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block ffa_reboot_nb = {
+	.notifier_call = ffa_reboot_notifier,
+};
+
 static int __init ffa_init(void)
 {
 	int ret;
@@ -2063,10 +2078,18 @@ static int __init ffa_init(void)
 	ffa_notifications_setup();
 
 	ret = ffa_setup_partitions();
+	if (ret) {
+		pr_err("failed to setup partitions\n");
+		goto notification_cleanup;
+	}
+
+	ret = register_reboot_notifier(&ffa_reboot_nb);
 	if (!ret)
 		return ret;
 
-	pr_err("failed to setup partitions\n");
+	pr_err("failed to register reboot notifier\n");
+	ffa_partitions_cleanup();
+notification_cleanup:
 	ffa_notifications_cleanup();
 	ffa_rxtx_unmap(drv_info->vm_id);
 free_pages:
@@ -2081,6 +2104,7 @@ rootfs_initcall(ffa_init);
 
 static void __exit ffa_exit(void)
 {
+	unregister_reboot_notifier(&ffa_reboot_nb);
 	ffa_notifications_cleanup();
 	ffa_partitions_cleanup();
 	ffa_rxtx_unmap(drv_info->vm_id);
